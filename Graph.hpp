@@ -11,23 +11,36 @@
 
 using namespace std;
 
+// Constantes
 const int INF = numeric_limits<int>::max();
 
+// Estrutura de aresta
 struct Edge {
     int to;
     int cost;
     bool required;
 };
 
+// Classe do grafo
 class Graph {
 private:
+    // Número de vértices
     int V;
+
+    // Lista de adjacência
     vector<list<Edge>> adj;
+
+    // Vetor de nós obrigatórios
     vector<bool> required_nodes;
+
+    // Matriz de arestas obrigatórias
     vector<vector<bool>> required;
+
+    // Lista de arestas obrigatórias
     bool directed;
 
 public:
+    // Construtor
     Graph(int vertices, bool isDirected = false) {
         V = vertices;
         adj.resize(V);
@@ -36,6 +49,7 @@ public:
         directed = isDirected;
     }
 
+    // Adiciona uma aresta
     void addEdge(int u, int v, int cost, bool isDirected = false, bool isRequired = false) {
         directed = directed || isDirected;
         adj[u].push_back({v, cost, isRequired});
@@ -46,10 +60,12 @@ public:
         }
     }
 
+    // Seta um nó como obrigatório
     void setRequiredNode(int u) {
         required_nodes[u] = true;
     }
 
+    // Algoritmo de busca em profundidade
     void dfs(int u, vector<bool>& visited) {
         visited[u] = true;
         for (auto& edge : adj[u]) {
@@ -59,6 +75,7 @@ public:
         }
     }
 
+    // Algoritmo de Floyd-Warshall
     vector<vector<int>> floydWarshall() {
         vector<vector<int>> dist(V, vector<int>(V, INF));
         for (int u = 0; u < V; ++u) {
@@ -77,10 +94,12 @@ public:
         return dist;
     }
 
-    int numVertices() {
+    // (1 - Quantidade de vértices)
+    int numNodes() {
         return V;
     }
 
+    // (2 - Quantidade de arestas)
     int numEdges() {
         int count = 0;
         for (int i = 0; i < V; ++i) {
@@ -93,6 +112,7 @@ public:
         return count;
     }
 
+    // (3 - Quantidade de arcos)
     int numArcs() {
         int count = 0;
         for (int i = 0; i < V; ++i)
@@ -100,10 +120,12 @@ public:
         return count;
     }
 
+    // (4 - Quantidade de vértices requeridos)
     int numRequiredNodes() {
         return count(required_nodes.begin(), required_nodes.end(), true);
     }
 
+    // (5 - Quantidade de arestas requeridas)
     int numRequiredEdges() {
         int count = 0;
         for (int i = 0; i < V; ++i)
@@ -113,6 +135,7 @@ public:
         return count;
     }
 
+    // (6 - Quantidade de arcos requeridos)
     int numRequiredArcs() {
         int count = 0;
         for (int i = 0; i < V; ++i)
@@ -122,11 +145,13 @@ public:
         return count;
     }
 
+    // (7 - Densidade do grafo (order strength))
     double density() {
         int e = numEdges();
         return directed ? (double)e / (V * (V - 1)) : (double)e / (V * (V - 1) / 2);
     }
 
+    // (8 - Componentes conectados)
     int connectedComponents() {
         vector<bool> visited(V, false);
         int count = 0;
@@ -139,6 +164,7 @@ public:
         return count;
     }
 
+    // (9 - Grau mínimo dos vértices)
     int minDegree() {
         int minDeg = INF;
         for (auto& edges : adj)
@@ -146,6 +172,7 @@ public:
         return minDeg;
     }
 
+    // (10 - Grau máximo dos vértices)
     int maxDegree() {
         int maxDeg = 0;
         for (auto& edges : adj)
@@ -153,6 +180,10 @@ public:
         return maxDeg;
     }
 
+    // (11 - Intermediação)
+    // (A intermediação de um nó mede a frequência com que ele
+    // aparece nos caminhos mais curtos entre outros nós.
+    // Não é necessário calcular outros caminhos mais curtos alternativos)
     vector<double> betweenness(const vector<vector<int>>& dist) {
         vector<double> result(V, 0.0);
         for (int s = 0; s < V; ++s) {
@@ -167,6 +198,7 @@ public:
         return result;
     }
 
+    // (12 - Caminho médio)
     double averagePathLength(const vector<vector<int>>& dist) {
         double total = 0;
         int count = 0;
@@ -179,6 +211,7 @@ public:
         return (count == 0) ? 0 : total / count;
     }
 
+    // (13 - Diâmetro)
     int diameter(const vector<vector<int>>& dist) {
         int dia = 0;
         for (int i = 0; i < V; ++i)
@@ -188,6 +221,7 @@ public:
         return dia;
     }
 
+    // (Impressão dos dados)
     void printStats() {
         cout << "Vértices: " << numVertices() << endl;
         cout << "Arestas (arcos direcionados): " << numEdges() << endl;
