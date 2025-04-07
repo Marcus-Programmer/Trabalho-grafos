@@ -223,7 +223,7 @@ public:
 
     // (Impressão dos dados)
     void printStats() {
-        cout << "Vértices: " << numVertices() << endl;
+        cout << "Vértices: " << numNodes() << endl;
         cout << "Arestas (arcos direcionados): " << numEdges() << endl;
         cout << "Densidade: " << fixed << setprecision(4) << density() << endl;
         cout << "Componentes Conectados: " << connectedComponents() << endl;
