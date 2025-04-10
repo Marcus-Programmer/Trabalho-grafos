@@ -38,6 +38,9 @@ private:
 
     // Lista de arestas obrigatórias
     bool directed;
+    
+    //Matriz de predecessores
+    vector<vector<int>> predecessor;
 
 public:
     // Construtor
@@ -76,22 +79,71 @@ public:
     }
 
     // Algoritmo de Floyd-Warshall
-    vector<vector<int>> floydWarshall() {
+    pair<vector<vector<int>>, vector<vector<int>>> floydWarshall() {
         vector<vector<int>> dist(V, vector<int>(V, INF));
+        vector<vector<int>> pred(V, vector<int>(V, -1));
+    
         for (int u = 0; u < V; ++u) {
             dist[u][u] = 0;
+            pred[u][u] = u;
             for (auto& edge : adj[u]) {
-                dist[u][edge.to] = min(dist[u][edge.to], edge.cost);
+                dist[u][edge.to] = edge.cost;
+                pred[u][edge.to] = u;
             }
         }
+    
+        for (int k = 0; k < V; ++k) {
+            for (int i = 0; i < V; ++i) {
+                for (int j = 0; j < V; ++j) {
+                    if (dist[i][k] < INF && dist[k][j] < INF && dist[i][k] + dist[k][j] < dist[i][j]) {
+                        dist[i][j] = dist[i][k] + dist[k][j];
+                        pred[i][j] = pred[k][j];
+                    }
+                }
+            }
+        }
+    
+        predecessor = pred; 
+        return {dist, pred};
+    }
 
-        for (int k = 0; k < V; ++k)
-            for (int i = 0; i < V; ++i)
-                for (int j = 0; j < V; ++j)
-                    if (dist[i][k] < INF && dist[k][j] < INF)
-                        dist[i][j] = min(dist[i][j], dist[i][k] + dist[k][j]);
+    // Função para reconstruir caminhos matriz de predecessores
+    vector<int> reconstructPath(int u, int v) {
+        vector<int> path;
+        if (predecessor.empty() || predecessor[u][v] == -1) return path;
+        
+        for (int at = v; at != u; at = predecessor[u][at]) {
+            if (at == -1) return {};
+            path.push_back(at);
+        }
+        path.push_back(u);
+        reverse(path.begin(), path.end());
+        return path;
+    }
 
-        return dist;
+    // Função para exportar grafo como imagem
+    void exportToDOT(const string& filename) {
+        ofstream file(filename);
+        if (!file.is_open()) {
+            cerr << "Erro ao abrir o arquivo para escrita do DOT." << endl;
+            return;
+        }
+    
+        file << (directed ? "digraph" : "graph") << " G {\n";
+    
+        for (int u = 0; u < V; ++u) {
+            for (const auto& edge : adj[u]) {
+                if (!directed && u > edge.to) continue;
+    
+                file << "  " << u << (directed ? " -> " : " -- ") << edge.to
+                     << " [label=\"" << edge.cost << "\"" 
+                     << (edge.required ? ", color=red" : "") << "];\n";
+            }
+        }
+    
+        file << "}" << endl;
+        file.close();
+        cout << "Arquivo DOT gerado em: " << filename << endl;
     }
 
     // (1 - Quantidade de vértices)
@@ -223,20 +275,53 @@ public:
 
     // (Impressão dos dados)
     void printStats() {
-        cout << "Vértices: " << numNodes() << endl;
-        cout << "Arestas (arcos direcionados): " << numEdges() << endl;
-        cout << "Densidade: " << fixed << setprecision(4) << density() << endl;
-        cout << "Componentes Conectados: " << connectedComponents() << endl;
-        cout << "Grau Mínimo: " << minDegree() << endl;
-        cout << "Grau Máximo: " << maxDegree() << endl;
-
-        auto dist = floydWarshall();
-        cout << "Caminho Médio: " << fixed << setprecision(2) << averagePathLength(dist) << endl;
-        cout << "Diâmetro: " << diameter(dist) << endl;
-
+        auto [dist, pred] = floydWarshall();
+    
+        cout << "+-------------------------------+" << endl;
+        cout << "|       Estatísticas do Grafo  |" << endl;
+        cout << "+-------------------------------+" << endl;
+    
+        cout << left << setw(30) << "Número de Vértices:" << V << endl;
+        cout << left << setw(30) << "Número de Arestas:" << numEdges() << endl;
+        cout << left << setw(30) << "Número de Arcos:" << numArcs() << endl;
+        cout << left << setw(30) << "Número de Nós Obrigatórios:" << numRequiredNodes() << endl;
+        cout << left << setw(30) << "Arestas Obrigatórias:" << numRequiredEdges() << endl;
+        cout << left << setw(30) << "Arcos Obrigatórios:" << numRequiredArcs() << endl;
+        cout << left << setw(30) << "Densidade:" << fixed << setprecision(4) << density() << endl;
+        cout << left << setw(30) << "Componentes Conectados:" << connectedComponents() << endl;
+        cout << left << setw(30) << "Grau Mínimo:" << minDegree() << endl;
+        cout << left << setw(30) << "Grau Máximo:" << maxDegree() << endl;
+        cout << left << setw(30) << "Caminho Médio:" << fixed << setprecision(2) << averagePathLength(dist) << endl;
+        cout << left << setw(30) << "Diâmetro:" << diameter(dist) << endl;
+    
+        cout << "\n+-------------------------------+" << endl;
+        cout << "|   Intermediação (Betweenness) |" << endl;
+        cout << "+-------------------------------+" << endl;
         auto btwn = betweenness(dist);
-        cout << "Intermediação (Betweenness):" << endl;
+        cout << left << setw(10) << "Nó" << "Valor" << endl;
+        cout << "-------------------------------" << endl;
         for (int i = 0; i < V; ++i)
-            cout << "  Nó " << i << ": " << fixed << setprecision(2) << btwn[i] << endl;
+            cout << left << setw(10) << i << fixed << setprecision(2) << btwn[i] << endl;
+    
+        // (Opcional) Mostrar a matriz de distâncias
+        cout << "\n+-------------------------------+" << endl;
+        cout << "|      Matriz de Distâncias     |" << endl;
+        cout << "+-------------------------------+" << endl;
+    
+        cout << setw(6) << " ";
+        for (int j = 0; j < V; ++j)
+            cout << setw(6) << j;
+        cout << endl;
+    
+        for (int i = 0; i < V; ++i) {
+            cout << setw(6) << i;
+            for (int j = 0; j < V; ++j) {
+                if (dist[i][j] == INF)
+                    cout << setw(6) << "INF";
+                else
+                    cout << setw(6) << dist[i][j];
+            }
+            cout << endl;
+        }
     }
 };
