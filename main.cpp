@@ -5,37 +5,95 @@ using namespace std;
 
 // Função principal
 int main() {
-    // Inicialização o grafo
-    int V, numArestas, numArcos;
-    cout << "Digite o número de vértices: ";
-    cin >> V;
+    string filename;
+    cout << "Digite o caminho para o arquivo .dat: ";
+    cin >> filename;
 
-    Graph g(V);
-    // Fim da inicialização o grafo
-
-    // Adição das arestas e arcos
-    cout << "Digite o número de arestas (não direcionadas): ";
-    cin >> numArestas;
-    cout << "Digite as arestas no formato: origem destino custo demanda\n";
-    for (int i = 0; i < numArestas; ++i) {
-        int u, v, c, d;
-        cin >> u >> v >> c >> d;
-        g.addEdge(u, v, c, false, true);
+    ifstream infile(filename);
+    if (!infile.is_open()) {
+        cerr << "Erro ao abrir o arquivo: " << filename << endl;
+        return 1;
     }
 
-    cout << "Digite o número de arcos (direcionadas): ";
-    cin >> numArcos;
-    cout << "Digite os arcos no formato: origem destino custo demanda\n";
-    for (int i = 0; i < numArcos; ++i) {
-        int u, v, c, d;
-        cin >> u >> v >> c >> d;
-        g.addEdge(u, v, c, true, true);
-    }
-    // Fim da adição das arestas e arcos
+    string line;
+    int V = 0;
+    Graph* g = nullptr;
 
-    // Cálculo das estatísticas do grafo
-    g.printStats();
-    // Fim do cálculo das estatísticas do grafo
+    while (getline(infile, line)) {
+        if (line.empty() || line[0] == 'c') continue;
+
+        if (line.find("#Nodes:") != string::npos) {
+            stringstream ss(line);
+            string tmp;
+            ss >> tmp >> V;
+            g = new Graph(V);
+        }
+
+        if (!g) continue; // Ignora tudo até inicializar o grafo
+
+        if (line.find("ReN.") != string::npos) {
+            while (getline(infile, line) && !line.empty() && line.find('.') == string::npos) {
+                string id;
+                int node, demand;
+                stringstream ss(line);
+                ss >> id >> node >> demand;
+                g->setRequiredNode(node - 1); // Ajuste para índice começando em 0
+            }
+        }
+
+        if (line.find("ReE.") != string::npos) {
+            while (getline(infile, line) && !line.empty() && line.find('.') == string::npos) {
+                string id;
+                int u, v, cost, demand;
+                stringstream ss(line);
+                ss >> id >> u >> v >> cost >> demand;
+                g->addEdge(u - 1, v - 1, cost, false, true);
+            }
+        }
+
+        if (line.find("ReA.") != string::npos) {
+            while (getline(infile, line) && !line.empty() && line.find('.') == string::npos) {
+                string id;
+                int u, v, cost, demand;
+                stringstream ss(line);
+                ss >> id >> u >> v >> cost >> demand;
+                g->addEdge(u - 1, v - 1, cost, true, true);
+            }
+        }
+
+        if (line.find("NRa.") != string::npos) {
+            while (getline(infile, line) && !line.empty() && line.find('.') == string::npos) {
+                string id;
+                int u, v, cost, demand;
+                stringstream ss(line);
+                ss >> id >> u >> v >> cost >> demand;
+                g->addEdge(u - 1, v - 1, cost, true, false);
+            }
+        }
+
+        if (line.find("NRe.") != string::npos) {
+            while (getline(infile, line) && !line.empty() && line.find('.') == string::npos) {
+                string id;
+                int u, v, cost, demand;
+                stringstream ss(line);
+                ss >> id >> u >> v >> cost >> demand;
+                g->addEdge(u - 1, v - 1, cost, false, false);
+            }
+        }
+    }
+
+    infile.close();
+
+    if (g) {
+        g->printStats();
+        g->exportToDOT("grafo.dot");
+        cout << "\nArquivo grafo.dot gerado com sucesso. Você pode visualizá-lo com o Graphviz!" << endl;
+        system("dot -Tpng grafo.dot -o grafo.png");
+        cout << "Arquivo grafo.png gerado com sucesso!" << endl;
+        delete g;
+    } else {
+        cerr << "Erro: grafo não inicializado!" << endl;
+    }
 
     return 0;
 }
