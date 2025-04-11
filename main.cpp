@@ -86,7 +86,7 @@ int main() {
     infile.close();
 
     if (g) {
-        g->printStats();
+        g->printStatsToFile();
         g->exportToDOT("grafo.dot");
         cout << "\nArquivo grafo.dot gerado com sucesso. Você pode visualizá-lo com o Graphviz!" << endl;
         system("dot -Tpng grafo.dot -o grafo.png");

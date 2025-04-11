@@ -274,54 +274,62 @@ public:
     }
 
     // (Impressão dos dados)
-    void printStats() {
+    void printStatsToFile(const string& filename = "estatisticas.txt") {
         auto [dist, pred] = floydWarshall();
-    
-        cout << "+-------------------------------+" << endl;
-        cout << "|       Estatísticas do Grafo  |" << endl;
-        cout << "+-------------------------------+" << endl;
-    
-        cout << left << setw(30) << "Número de Vértices:" << V << endl;
-        cout << left << setw(30) << "Número de Arestas:" << numEdges() << endl;
-        cout << left << setw(30) << "Número de Arcos:" << numArcs() << endl;
-        cout << left << setw(30) << "Número de Nós Obrigatórios:" << numRequiredNodes() << endl;
-        cout << left << setw(30) << "Arestas Obrigatórias:" << numRequiredEdges() << endl;
-        cout << left << setw(30) << "Arcos Obrigatórios:" << numRequiredArcs() << endl;
-        cout << left << setw(30) << "Densidade:" << fixed << setprecision(4) << density() << endl;
-        cout << left << setw(30) << "Componentes Conectados:" << connectedComponents() << endl;
-        cout << left << setw(30) << "Grau Mínimo:" << minDegree() << endl;
-        cout << left << setw(30) << "Grau Máximo:" << maxDegree() << endl;
-        cout << left << setw(30) << "Caminho Médio:" << fixed << setprecision(2) << averagePathLength(dist) << endl;
-        cout << left << setw(30) << "Diâmetro:" << diameter(dist) << endl;
-    
-        cout << "\n+-------------------------------+" << endl;
-        cout << "|   Intermediação (Betweenness) |" << endl;
-        cout << "+-------------------------------+" << endl;
+        ofstream out(filename);
+
+        if (!out.is_open()) {
+            cerr << "Erro ao abrir o arquivo de estatísticas!" << endl;
+            return;
+        }
+
+        out << "+-------------------------------+" << endl;
+        out << "|       Estatísticas do Grafo  |" << endl;
+        out << "+-------------------------------+" << endl;
+
+        out << left << setw(30) << "Número de Vértices:" << V << endl;
+        out << left << setw(30) << "Número de Arestas:" << numEdges() << endl;
+        out << left << setw(30) << "Número de Arcos:" << numArcs() << endl;
+        out << left << setw(30) << "Número de Nós Obrigatórios:" << numRequiredNodes() << endl;
+        out << left << setw(30) << "Arestas Obrigatórias:" << numRequiredEdges() << endl;
+        out << left << setw(30) << "Arcos Obrigatórios:" << numRequiredArcs() << endl;
+        out << left << setw(30) << "Densidade:" << fixed << setprecision(4) << density() << endl;
+        out << left << setw(30) << "Componentes Conectados:" << connectedComponents() << endl;
+        out << left << setw(30) << "Grau Mínimo:" << minDegree() << endl;
+        out << left << setw(30) << "Grau Máximo:" << maxDegree() << endl;
+        out << left << setw(30) << "Caminho Médio:" << fixed << setprecision(2) << averagePathLength(dist) << endl;
+        out << left << setw(30) << "Diâmetro:" << diameter(dist) << endl;
+
+        out << "\n+-------------------------------+" << endl;
+        out << "|   Intermediação (Betweenness) |" << endl;
+        out << "+-------------------------------+" << endl;
         auto btwn = betweenness(dist);
-        cout << left << setw(10) << "Nó" << "Valor" << endl;
-        cout << "-------------------------------" << endl;
+        out << left << setw(10) << "Nó" << "Valor" << endl;
+        out << "-------------------------------" << endl;
         for (int i = 0; i < V; ++i)
-            cout << left << setw(10) << i << fixed << setprecision(2) << btwn[i] << endl;
-    
-        // (Opcional) Mostrar a matriz de distâncias
-        cout << "\n+-------------------------------+" << endl;
-        cout << "|      Matriz de Distâncias     |" << endl;
-        cout << "+-------------------------------+" << endl;
-    
-        cout << setw(6) << " ";
+            out << left << setw(10) << i << fixed << setprecision(2) << btwn[i] << endl;
+
+        out << "\n+-------------------------------+" << endl;
+        out << "|      Matriz de Distâncias     |" << endl;
+        out << "+-------------------------------+" << endl;
+
+        out << setw(6) << " ";
         for (int j = 0; j < V; ++j)
-            cout << setw(6) << j;
-        cout << endl;
-    
+            out << setw(6) << j;
+        out << endl;
+
         for (int i = 0; i < V; ++i) {
-            cout << setw(6) << i;
+            out << setw(6) << i;
             for (int j = 0; j < V; ++j) {
                 if (dist[i][j] == INF)
-                    cout << setw(6) << "INF";
+                    out << setw(6) << "INF";
                 else
-                    cout << setw(6) << dist[i][j];
+                    out << setw(6) << dist[i][j];
             }
-            cout << endl;
+            out << endl;
         }
+
+        out.close();
+        cout << "Estatísticas salvas em: " << filename << endl;
     }
 };
