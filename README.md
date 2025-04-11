@@ -9,14 +9,15 @@
 
 Este projeto implementa um grafo com suporte a arestas e arcos (direcionados e não-direcionados), além de funcionalidades para análise de propriedades estruturais do grafo, como número de vértices, grau mínimo/máximo, densidade, componentes conectados, diâmetro, intermediação (betweenness), entre outras.
 
-O objetivo é atender à **Etapa 1** do trabalho prático da disciplina de Grafos (UFLA), realizando a leitura dos dados do grafo e exibindo as principais estatísticas e métricas exigidas.
+O objetivo é atender à **Etapa 1** do trabalho prático da disciplina de Grafos (UFLA), realizando a leitura automatizada de dados a partir de arquivos `.dat` e exibindo as principais estatísticas e métricas exigidas, com suporte visual via Graphviz.
 
 ---
 
 ## 📁 Estrutura
 
-- `Graph.hpp`: Implementação da classe `Graph`, contendo toda a lógica do grafo.
-- `main.cpp`: Programa principal que interage com o usuário, lê os dados de entrada e exibe as estatísticas do grafo.
+- `Graph.hpp`: Implementação da classe `Graph`, contendo toda a lógica do grafo, algoritmos e métricas.
+- `main.cpp`: Programa principal que lê um arquivo `.dat`, constrói o grafo, gera métricas e exporta o grafo em formato visual.
+- `README.md`: Instruções do projeto.
 
 ---
 
@@ -35,6 +36,8 @@ O objetivo é atender à **Etapa 1** do trabalho prático da disciplina de Grafo
 11. Intermediação (Betweenness)  
 12. Caminho médio  
 13. Diâmetro do grafo  
+14. Exportação para arquivo `.dot` e `.png`
+15. Visualização da matriz de distâncias
 
 ---
 
@@ -42,7 +45,15 @@ O objetivo é atender à **Etapa 1** do trabalho prático da disciplina de Grafo
 
 ### Pré-requisitos
 
-- Compilador C++.
+- Compilador C++
+- Graphviz instalado (para gerar o grafo como imagem)
+
+### Como instalar o Graphviz
+
+```bash
+sudo apt update
+sudo apt install graphviz
+```
 
 ### Compilação
 
@@ -56,24 +67,18 @@ g++ main.cpp -o main
 ./main
 ```
 
-### Exemplo de entrada (interativa)
+O programa pedirá o nome do arquivo `.dat` (sem o caminho), que estão na pasta `entradas/`.
 
-```
-Digite o número de vértices: 4
-Digite o número de arestas (não direcionadas): 2
-Digite as arestas no formato: origem destino custo demanda
-0 1 3 1
-1 2 2 1
-Digite o número de arcos (direcionadas): 1
-Digite os arcos no formato: origem destino custo demanda
-2 3 4 1
-```
+### Saídas Geradas
+
+- Estatísticas do grafo no terminal.
+- Arquivo `grafo.dot` (formato Graphviz).
+- Arquivo `grafo.png` (imagem gerada automaticamente).
 
 ---
 
 ## 📚 Bibliotecas utilizadas
 
-- `<vector>`, `<list>`, `<queue>`, `<limits>`, `<algorithm>`, `<iostream>`, `<iomanip>`  
-  Todas são bibliotecas padrão da STL em C++.
+- STL: `<vector>`, `<list>`, `<queue>`, `<limits>`, `<algorithm>`, `<iostream>`, `<iomanip>`, `<fstream>`, `<sstream>`, `<string>`
 
 ---
