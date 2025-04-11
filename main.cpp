@@ -6,8 +6,9 @@ using namespace std;
 // Função principal
 int main() {
     string filename;
-    cout << "Digite o caminho para o arquivo .dat: ";
+    cout << "Digite o nome do arquivo(com extensão .dat): ";
     cin >> filename;
+    filename = "entradas/" + filename; 
 
     ifstream infile(filename);
     if (!infile.is_open()) {
