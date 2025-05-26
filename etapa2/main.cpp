@@ -13,7 +13,6 @@ namespace fs = std::filesystem;
 
 // Função para ler arquivo de entrada e configurar solver
 Solver* parseInputFile(const string& filename, Graph*& graph) {
-    // ... [código da função parseInputFile permanece igual] ...
     ifstream infile(filename);
     if (!infile.is_open()) {
         cerr << "Erro ao abrir o arquivo: " << filename << endl;
@@ -21,8 +20,10 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
     }
 
     string line;
-    int V = 0, capacity = 0, depot = 0;
+    int V = 0, capacity = 0, depot = 0; // Inicializar depot como 0
     Solver* solver = nullptr;
+    
+    // Contadores para IDs de serviços
     int serviceId = 1;
 
     cout << "Iniciando leitura do arquivo: " << filename << endl;
@@ -30,6 +31,7 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
     while (getline(infile, line)) {
         if (line.empty() || line[0] == 'c') continue;
 
+        // Lê número de nós
         if (line.find("#Nodes:") != string::npos) {
             stringstream ss(line);
             string tmp;
@@ -51,6 +53,7 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
             }
         }
         
+        // Lê capacidade
         if (line.find("Capacity:") != string::npos) {
             stringstream ss(line);
             string tmp;
@@ -62,12 +65,13 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
             cout << "Capacidade: " << capacity << endl;
         }
         
+        // Lê nó depósito
         if (line.find("Depot Node:") != string::npos) {
             stringstream ss(line);
             string tmp1, tmp2;
             int depotInput;
             ss >> tmp1 >> tmp2 >> depotInput;
-            depot = depotInput - 1;
+            depot = depotInput - 1; // Ajusta para índice base 0
             
             if (depot < 0) {
                 cerr << "Aviso: Depot inválido (" << depotInput << "), usando depot 1" << endl;
@@ -82,6 +86,7 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
 
         if (!graph) continue;
 
+        // Inicializa solver quando tiver todas as informações
         if (!solver && V > 0 && capacity > 0) {
             try {
                 solver = new Solver(graph, depot, capacity);
@@ -92,7 +97,210 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
             }
         }
 
-        // ... [resto do código de parsing permanece igual] ...
+        // Lê nós requeridos
+        if (line.find("ReN.") != string::npos && line.find("DEMAND") != string::npos) {
+            cout << "Lendo nós requeridos..." << endl;
+            while (getline(infile, line) && !line.empty() && line[0] != '#' && 
+                   line.find("ReE.") == string::npos && line.find("EDGE") == string::npos && 
+                   line.find("ReA.") == string::npos && line.find("ARC") == string::npos) {
+                if (line.empty() || line.find("From N.") != string::npos) continue;
+                
+                stringstream ss(line);
+                string nodeId;
+                int demand, serviceCost;
+                
+                if (!(ss >> nodeId >> demand >> serviceCost)) {
+                    cerr << "Erro ao ler linha de nó requerido: " << line << endl;
+                    continue;
+                }
+                
+                try {
+                    // Extrai número do nó do ID (ex: "N4" -> 4)
+                    if (nodeId.length() < 2 || nodeId[0] != 'N') {
+                        cerr << "Formato de ID de nó inválido: " << nodeId << endl;
+                        continue;
+                    }
+                    
+                    int nodeNum = stoi(nodeId.substr(1)) - 1; // Ajusta para base 0
+                    
+                    if (nodeNum < 0 || nodeNum >= V) {
+                        cerr << "Aviso: Nó " << nodeNum + 1 << " fora dos limites, ignorando" << endl;
+                        continue;
+                    }
+                    
+                    if (demand < 0 || serviceCost < 0) {
+                        cerr << "Aviso: Valores negativos para nó " << nodeNum + 1 << ", ignorando" << endl;
+                        continue;
+                    }
+                    
+                    graph->setRequiredNode(nodeNum);
+                    if (solver) {
+                        solver->addService(serviceId++, 'N', nodeNum, nodeNum, demand, serviceCost, 0);
+                        cout << "Nó requerido: " << nodeNum + 1 << " (demanda: " << demand << ", custo: " << serviceCost << ")" << endl;
+                    }
+                } catch (const exception& e) {
+                    cerr << "Erro ao processar nó requerido: " << line << " - " << e.what() << endl;
+                }
+            }
+        }
+
+        // Lê arestas requeridas
+        if (line.find("ReE.") != string::npos && line.find("From N.") != string::npos) {
+            cout << "Lendo arestas requeridas..." << endl;
+            while (getline(infile, line) && !line.empty() && line[0] != '#' && 
+                   line.find("EDGE") == string::npos && line.find("ReA.") == string::npos && 
+                   line.find("ARC") == string::npos) {
+                if (line.empty()) continue;
+                
+                stringstream ss(line);
+                string edgeId;
+                int u, v, travelCost, demand, serviceCost;
+                
+                if (!(ss >> edgeId >> u >> v >> travelCost >> demand >> serviceCost)) {
+                    cerr << "Erro ao ler linha de aresta requerida: " << line << endl;
+                    continue;
+                }
+                
+                u--; v--; // Ajusta para base 0
+                
+                if (u < 0 || u >= V || v < 0 || v >= V) {
+                    cerr << "Aviso: Aresta com nós inválidos (" << u+1 << "," << v+1 << "), ignorando" << endl;
+                    continue;
+                }
+                
+                if (travelCost < 0 || demand < 0 || serviceCost < 0) {
+                    cerr << "Aviso: Valores negativos para aresta " << u+1 << "-" << v+1 << ", ignorando" << endl;
+                    continue;
+                }
+                
+                try {
+                    graph->addEdge(u, v, travelCost, false, true);
+                    if (solver) {
+                        solver->addService(serviceId++, 'E', u, v, demand, serviceCost, travelCost);
+                        cout << "Aresta requerida: " << u + 1 << "-" << v + 1 << " (custo viagem: " << travelCost 
+                             << ", demanda: " << demand << ", custo serviço: " << serviceCost << ")" << endl;
+                    }
+                } catch (const exception& e) {
+                    cerr << "Erro ao adicionar aresta requerida: " << e.what() << endl;
+                }
+            }
+        }
+
+        // Lê arcos requeridos
+        if (line.find("ReA.") != string::npos && line.find("FROM N.") != string::npos) {
+            cout << "Lendo arcos requeridos..." << endl;
+            while (getline(infile, line) && !line.empty() && line[0] != '#' && 
+                   line.find("EDGE") == string::npos && line.find("ARC") == string::npos) {
+                if (line.empty()) continue;
+                
+                stringstream ss(line);
+                string arcId;
+                int u, v, travelCost, demand, serviceCost;
+                
+                if (!(ss >> arcId >> u >> v >> travelCost >> demand >> serviceCost)) {
+                    cerr << "Erro ao ler linha de arco requerido: " << line << endl;
+                    continue;
+                }
+                
+                u--; v--; // Ajusta para base 0
+                
+                if (u < 0 || u >= V || v < 0 || v >= V) {
+                    cerr << "Aviso: Arco com nós inválidos (" << u+1 << "," << v+1 << "), ignorando" << endl;
+                    continue;
+                }
+                
+                if (travelCost < 0 || demand < 0 || serviceCost < 0) {
+                    cerr << "Aviso: Valores negativos para arco " << u+1 << "->" << v+1 << ", ignorando" << endl;
+                    continue;
+                }
+                
+                try {
+                    graph->addEdge(u, v, travelCost, true, true);
+                    if (solver) {
+                        solver->addService(serviceId++, 'A', u, v, demand, serviceCost, travelCost);
+                        cout << "Arco requerido: " << u + 1 << "->" << v + 1 << " (custo viagem: " << travelCost 
+                             << ", demanda: " << demand << ", custo serviço: " << serviceCost << ")" << endl;
+                    }
+                } catch (const exception& e) {
+                    cerr << "Erro ao adicionar arco requerido: " << e.what() << endl;
+                }
+            }
+        }
+
+        // Lê arestas não requeridas
+        if (line.find("EDGE") != string::npos && line.find("ReE.") == string::npos && 
+            line.find("FROM N.") != string::npos) {
+            cout << "Lendo arestas não requeridas..." << endl;
+            while (getline(infile, line) && !line.empty() && line[0] != '#' && 
+                   line.find("ARC") == string::npos) {
+                if (line.empty()) continue;
+                
+                stringstream ss(line);
+                string edgeId;
+                int u, v, cost;
+                
+                if (!(ss >> edgeId >> u >> v >> cost)) {
+                    cerr << "Erro ao ler linha de aresta: " << line << endl;
+                    continue;
+                }
+                
+                u--; v--; // Ajusta para base 0
+                
+                if (u < 0 || u >= V || v < 0 || v >= V) {
+                    cerr << "Aviso: Aresta com nós inválidos (" << u+1 << "," << v+1 << "), ignorando" << endl;
+                    continue;
+                }
+                
+                if (cost < 0) {
+                    cerr << "Aviso: Custo negativo para aresta " << u+1 << "-" << v+1 << ", ignorando" << endl;
+                    continue;
+                }
+                
+                try {
+                    graph->addEdge(u, v, cost, false, false);
+                    cout << "Aresta: " << u + 1 << "-" << v + 1 << " (custo: " << cost << ")" << endl;
+                } catch (const exception& e) {
+                    cerr << "Erro ao adicionar aresta: " << e.what() << endl;
+                }
+            }
+        }
+
+        // Lê arcos não requeridos
+        if (line.find("ARC") != string::npos && line.find("ReA.") == string::npos && 
+            line.find("FROM N.") != string::npos) {
+            cout << "Lendo arcos não requeridos..." << endl;
+            while (getline(infile, line) && !line.empty()) {
+                if (line.empty()) continue;
+                
+                stringstream ss(line);
+                string arcId;
+                int u, v, cost;
+                
+                if (!(ss >> arcId >> u >> v >> cost)) {
+                    cerr << "Erro ao ler linha de arco: " << line << endl;
+                    continue;
+                }
+                
+                u--; v--; // Ajusta para base 0
+                
+                if (u < 0 || u >= V || v < 0 || v >= V) {
+                    cerr << "Aviso: Arco com nós inválidos (" << u+1 << "," << v+1 << "), ignorando" << endl;
+                    continue;
+                }
+                
+                if (cost < 0) {
+                    cerr << "Aviso: Custo negativo para arco " << u+1 << "->" << v+1 << ", ignorando" << endl;
+                    continue;
+                }
+                
+                try {
+                    graph->addEdge(u, v, cost, true, false);
+                    cout << "Arco: " << u + 1 << "->" << v + 1 << " (custo: " << cost << ")" << endl;
+                } catch (const exception& e) {
+                    cerr << "Erro ao adicionar arco: " << e.what() << endl;
+                }
+            }
+        }
     }
 
     infile.close();
