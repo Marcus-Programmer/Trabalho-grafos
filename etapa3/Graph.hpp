@@ -1,4 +1,5 @@
-#pragma once
+#ifndef GRAPH_HPP
+#define GRAPH_HPP
 
 #include <iostream>
 #include <iomanip>
@@ -14,24 +15,32 @@
 using namespace std;
 
 // Constante para infinito, usada em algoritmos de caminho mais curto.
-// Usar 'long long' para evitar overflow na soma de custos.
 const long long INF = numeric_limits<long long>::max();
 
-// Estrutura para representar uma aresta ou arco no grafo.
+/**
+ * @struct Edge
+ * @brief Representa uma aresta ou arco no grafo.
+ */
 struct Edge {
     int to;       // Nó de destino
     int cost;     // Custo para atravessar
     bool required; // Se o serviço nesta aresta/arco é obrigatório
 };
 
-// Classe principal do Grafo
+/**
+ * @class Graph
+ * @brief Representa o grafo do problema, contendo nós e suas conexões (arestas/arcos).
+ */
 class Graph {
 private:
     int V; // Número de vértices
     vector<list<Edge>> adj; // Lista de adjacência para representar as conexões
 
 public:
-    // Construtor: inicializa o grafo com um número específico de vértices.
+    /**
+     * @brief Construtor da classe Graph.
+     * @param vertices O número total de vértices no grafo.
+     */
     Graph(int vertices) : V(vertices) {
         if (V <= 0) {
             throw invalid_argument("O número de vértices deve ser positivo.");
@@ -39,10 +48,16 @@ public:
         adj.resize(V);
     }
 
-    // Adiciona uma aresta (ou arco) ao grafo.
+    /**
+     * @brief Adiciona uma aresta ou arco ao grafo.
+     * @param u Nó de origem.
+     * @param v Nó de destino.
+     * @param cost Custo de travessia.
+     * @param isDirected Se a conexão é direcionada (arco) ou não (aresta).
+     * @param isRequired Se a conexão corresponde a um serviço obrigatório.
+     */
     void addEdge(int u, int v, int cost, bool isDirected = false, bool isRequired = false) {
         if (u < 0 || u >= V || v < 0 || v >= V) {
-            cerr << "AVISO: Tentativa de adicionar aresta com nó inválido (" << u + 1 << ", " << v + 1 << "). Ignorando." << endl;
             return;
         }
         adj[u].push_back({v, cost, isRequired});
@@ -51,13 +66,18 @@ public:
         }
     }
     
-    // Retorna o número de vértices no grafo.
+    /**
+     * @brief Retorna o número de vértices no grafo.
+     * @return O número de vértices.
+     */
     int numNodes() const {
         return V;
     }
 
-    // Algoritmo de Floyd-Warshall para calcular os caminhos mais curtos entre todos os pares de nós.
-    // Retorna uma matriz de distâncias. Essencial para o Solver tomar decisões.
+    /**
+     * @brief Calcula os caminhos mais curtos entre todos os pares de nós usando o algoritmo de Floyd-Warshall.
+     * @return Uma matriz de adjacência 2D contendo as distâncias mínimas entre cada par de nós.
+     */
     vector<vector<long long>> floydWarshall() {
         vector<vector<long long>> dist(V, vector<long long>(V, INF));
 
@@ -77,48 +97,7 @@ public:
                 }
             }
         }
-        
-        cout << "LOG: Matriz de distâncias calculada via Floyd-Warshall." << endl;
         return dist;
     }
-
-    // Gera um ficheiro .dot para visualização do grafo com Graphviz.
-    void exportToDOT(const string& filename) {
-        ofstream file(filename);
-        if (!file.is_open()) {
-            cerr << "Erro ao abrir o arquivo para escrita do DOT: " << filename << endl;
-            return;
-        }
-    
-        file << "digraph G {\n";
-        file << "  node [shape=circle];\n";
-    
-        for (int u = 0; u < V; ++u) {
-            for (const auto& edge : adj[u]) {
-                 file << "  " << u + 1 << " -> " << edge.to + 1
-                     << " [label=\"" << edge.cost << "\"" 
-                     << (edge.required ? ", color=red, penwidth=2.0" : "") << "];\n";
-            }
-        }
-    
-        file << "}" << endl;
-        file.close();
-        cout << "LOG: Grafo exportado para " << filename << endl;
-    }
-    
-    // Imprime estatísticas simples do grafo
-    void printStatsToFile(const string& filename) {
-        ofstream out(filename);
-        if (!out.is_open()) {
-            cerr << "Erro ao abrir o arquivo de estatísticas!" << endl;
-            return;
-        }
-        out << "Estatísticas do Grafo" << endl;
-        out << "---------------------" << endl;
-        out << "Número de Vértices: " << V << endl;
-        long long edgeCount = 0;
-        for(int i=0; i<V; ++i) edgeCount += adj[i].size();
-        out << "Número de Arestas/Arcos (entradas na lista de adj.): " << edgeCount << endl;
-        out.close();
-    }
 };
+#endif

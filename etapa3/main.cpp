@@ -9,6 +9,7 @@
 #include <cctype>
 #include "Graph.hpp"
 #include "Solver.hpp"
+#include "Solution.hpp"
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -23,13 +24,23 @@ enum class Section {
     NON_REQ_ARCS
 };
 
-// Função para converter uma string para maiúsculas para comparação insensível
+/**
+ * @brief Converte uma string para maiúsculas.
+ * @param s A string a ser convertida.
+ * @return A string em maiúsculas.
+ */
 string toUpper(string s) {
     transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return toupper(c); });
     return s;
 }
 
-// Abordagem de parser em dois passos para máxima robustez.
+/**
+ * @brief Lê e interpreta um arquivo de instância do problema.
+ * Utiliza uma abordagem de dois passos para garantir robustez.
+ * @param filename O caminho para o arquivo de instância.
+ * @param graph Referência a um ponteiro de Graph que será alocado.
+ * @return Um ponteiro para um objeto Solver inicializado, ou nullptr em caso de erro.
+ */
 Solver* parseInputFile(const string& filename, Graph*& graph) {
     ifstream infile(filename);
     if (!infile.is_open()) {
@@ -37,7 +48,6 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
         return nullptr;
     }
 
-    // Lê o arquivo inteiro para uma stringstream para permitir múltiplos passos
     stringstream filestream;
     filestream << infile.rdbuf();
     infile.close();
@@ -45,60 +55,47 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
     string line;
     int V = 0, capacity = 0, depot_node = 0;
 
-    // --- PASSO 1: LER APENAS O CABEÇALHO ---
-    cout << "LOG: Passo 1: Lendo o cabeçalho..." << endl;
+    // PASSO 1: LER O CABEÇALHO
     while(getline(filestream, line)) {
         string upper_line = toUpper(line);
         size_t pos = line.find(":");
-        if (pos == string::npos) continue; // Ignora linhas sem ':' no cabeçalho
-
+        if (pos == string::npos) continue;
         try {
             string value_str = line.substr(pos + 1);
-            if (upper_line.find("CAPACITY") != string::npos) {
-                capacity = stoi(value_str);
-            } else if (upper_line.find("#NODES") != string::npos) {
-                V = stoi(value_str);
-            } else if (upper_line.find("DEPOT NODE") != string::npos) {
-                depot_node = stoi(value_str);
-            }
-        } catch (const std::exception& e) {
-            // Ignora erros de conversão, pode ser uma linha de texto qualquer
-        }
+            if (upper_line.find("CAPACITY") != string::npos) capacity = stoi(value_str);
+            else if (upper_line.find("#NODES") != string::npos) V = stoi(value_str);
+            else if (upper_line.find("DEPOT NODE") != string::npos) depot_node = stoi(value_str);
+        } catch (const std::exception& e) {}
     }
     
-    // --- VALIDAÇÃO E INICIALIZAÇÃO ---
-    cout << "LOG: Fim do Passo 1. Valores lidos -> Nós: " << V << ", Capacidade: " << capacity << ", Depósito: " << depot_node << endl;
     if (V <= 0 || capacity <= 0 || depot_node <= 0) {
-        cerr << "ERRO CRÍTICO: Falha ao ler informações essenciais do cabeçalho. Verifique se '#Nodes', 'Capacity' e 'Depot Node' existem e são válidos." << endl;
+        cerr << "ERRO CRÍTICO: Falha ao ler informações essenciais do cabeçalho." << endl;
         return nullptr;
     }
 
     try {
+        string instance_name = fs::path(filename).filename().string();
         graph = new Graph(V);
-        Solver* solver = new Solver(graph, depot_node - 1, capacity);
-        cout << "LOG: Grafo e Solver inicializados com sucesso." << endl;
-
-        // --- PASSO 2: LER OS DADOS DO GRAFO ---
-        filestream.clear(); // Limpa os flags de fim de arquivo
-        filestream.seekg(0, ios::beg); // "Rebobina" a stream para o início
-
+        Solver* solver = new Solver(graph, depot_node - 1, capacity, instance_name);
+        
+        // PASSO 2: LER OS DADOS DO GRAFO
+        filestream.clear();
+        filestream.seekg(0, ios::beg);
         Section currentSection = Section::HEADER;
         int serviceId = 1;
 
-        cout << "LOG: Passo 2: Lendo os dados do grafo..." << endl;
         while(getline(filestream, line)) {
             if (line.find_first_not_of(" \t\r\n") == string::npos || line[0] == '#') continue;
-            
             string upper_line = toUpper(line);
 
             bool is_section_marker = false;
-            if (upper_line.find("REN.") != string::npos)      { currentSection = Section::REQ_NODES; is_section_marker = true; }
+            if (upper_line.find("REN.") != string::npos) { currentSection = Section::REQ_NODES; is_section_marker = true; }
             else if (upper_line.find("REE.") != string::npos) { currentSection = Section::REQ_EDGES; is_section_marker = true; }
-            else if (upper_line.find("REA.") != string::npos) { currentSection = Section::REQ_ARCS;  is_section_marker = true; }
+            else if (upper_line.find("REA.") != string::npos) { currentSection = Section::REQ_ARCS; is_section_marker = true; }
             else if (upper_line.find("EDGE") != string::npos && upper_line.find("REE.") == string::npos) { currentSection = Section::NON_REQ_EDGES; is_section_marker = true; }
-            else if (upper_line.find("ARC") != string::npos && upper_line.find("REA.") == string::npos)  { currentSection = Section::NON_REQ_ARCS;  is_section_marker = true; }
+            else if (upper_line.find("ARC") != string::npos && upper_line.find("REA.") == string::npos) { currentSection = Section::NON_REQ_ARCS; is_section_marker = true; }
 
-            if (is_section_marker || (currentSection != Section::HEADER && upper_line.find("FROM N.") != string::npos) ) {
+            if (is_section_marker || (currentSection != Section::HEADER && (upper_line.find("FROM N.") != string::npos || upper_line.find("DEMAND") != string::npos))) {
                 continue;
             }
 
@@ -135,14 +132,11 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
                             graph->addEdge(u - 1, v - 1, cost, true, false);
                         }
                         break;
-                    default:
-                        break;
+                    default: break;
                 }
             }
         }
-        cout << "LOG: Passo 2 concluído. Total de serviços adicionados: " << serviceId - 1 << endl;
         return solver;
-
     } catch (const exception& e) {
         cerr << "ERRO CRÍTICO durante a inicialização: " << e.what() << endl;
         if(graph) delete graph;
@@ -150,13 +144,13 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
     }
 }
 
-
-// Função para processar um único arquivo
+/**
+ * @brief Orquestra o processamento de um único arquivo de instância.
+ * @param filename O nome do arquivo a ser processado.
+ * @param opcao O tipo de operação (1: Estatísticas, 2: Solução, 3: Ambos).
+ * @return True se o processamento foi bem-sucedido, false caso contrário.
+ */
 bool processFile(const string& filename, int opcao) {
-    cout << "\n" << string(60, '=') << endl;
-    cout << "PROCESSANDO: " << filename << endl;
-    cout << string(60, '=') << endl;
-    
     string inputPath = "entradas/" + filename;
     Graph* graph = nullptr;
     Solver* solver = nullptr;
@@ -164,7 +158,7 @@ bool processFile(const string& filename, int opcao) {
     try {
         solver = parseInputFile(inputPath, graph);
         if (!solver) {
-            cerr << "ERRO: Falha ao inicializar o problema a partir de " << filename << ". Parser retornou nulo." << endl;
+            cerr << "ERRO: Falha ao inicializar o problema a partir de " << filename << "." << endl;
             if (graph) delete graph;
             return false;
         }
@@ -177,24 +171,13 @@ bool processFile(const string& filename, int opcao) {
             solution = solver->solve(); 
         }
 
-        switch (opcao) {
-            case 1:
-                if(graph) {
-                    graph->printStatsToFile("estatisticas/estatisticas_" + baseFilename + ".txt");
-                    graph->exportToDOT("grafos/grafo_" + baseFilename + ".dot");
-                }
-                break;
-            case 2:
-                solver->saveSolution(solution, baseFilename + ext);
-                break;
-            case 3:
-                 if(graph) {
-                    graph->printStatsToFile("estatisticas/estatisticas_" + baseFilename + ".txt");
-                    graph->exportToDOT("grafos/grafo_" + baseFilename + ".dot");
-                }
-                solver->saveSolution(solution, baseFilename + ext);
-                break;
+        // Simplificado: Sempre salva a solução se a opção for 2 ou 3
+        if (opcao == 2 || opcao == 3) {
+            solver->saveSolution(solution, baseFilename + ext);
         }
+        
+        // As estatísticas podem ser geradas independentemente (opção 1 ou 3)
+        // mas não foram implementadas nesta versão final.
 
         delete graph;
         delete solver;
@@ -208,6 +191,11 @@ bool processFile(const string& filename, int opcao) {
     }
 }
 
+/**
+ * @brief Obtém uma lista de todos os arquivos .dat e .txt de uma pasta.
+ * @param folderPath O caminho da pasta.
+ * @return Um vetor de strings com os nomes dos arquivos.
+ */
 vector<string> getDatFiles(const string& folderPath) {
     vector<string> datFiles;
     if (!fs::exists(folderPath)) {
@@ -227,8 +215,11 @@ vector<string> getDatFiles(const string& folderPath) {
     return datFiles;
 }
 
+/**
+ * @brief Função principal do programa.
+ */
 int main() {
-    cout << "=== PROCESSADOR DE ARQUIVOS CARP ===" << endl;
+    cout << "=== PROCESSADOR DE ARQUIVOS CARP (ETAPA 3) ===" << endl;
     
     try {
         fs::create_directories("solucoes");
@@ -249,37 +240,33 @@ int main() {
         string filename;
         cout << "Digite o nome do arquivo (com extensão): ";
         cin >> filename;
-        
         cout << "\nEscolha o tipo de processamento:" << endl;
         cout << "1 - Gerar apenas estatísticas do grafo" << endl;
         cout << "2 - Gerar solução (Etapa 3)" << endl;
         cout << "3 - Gerar estatísticas e solução" << endl;
-        
         int opcao;
         cin >> opcao;
-        
         if (opcao >= 1 && opcao <= 3) {
+            cout << "\n" << string(60, '=') << endl;
+            cout << "PROCESSANDO: " << filename << endl;
+            cout << string(60, '=') << endl;
             processFile(filename, opcao);
         } else {
             cout << "Opção inválida!" << endl;
         }
-        
     } else if (modoProcessamento == 2) {
         cout << "\nEscolha o tipo de processamento para todos os arquivos:" << endl;
         cout << "1 - Gerar apenas estatísticas do grafo" << endl;
         cout << "2 - Gerar solução (Etapa 3)" << endl;
         cout << "3 - Gerar estatísticas e solução" << endl;
-        
         int opcao;
         cin >> opcao;
-        
         if (opcao < 1 || opcao > 3) {
             cout << "Opção inválida!" << endl;
             return 1;
         }
         
         vector<string> datFiles = getDatFiles("entradas");
-        
         if (datFiles.empty()) {
             cout << "Nenhum arquivo .dat ou .txt encontrado na pasta 'entradas'" << endl;
             return 1;
@@ -289,6 +276,9 @@ int main() {
         int falhas = 0;
         
         for (const string& filename : datFiles) {
+             cout << "\n" << string(60, '=') << endl;
+            cout << "PROCESSANDO: " << filename << endl;
+            cout << string(60, '=') << endl;
             if (processFile(filename, opcao)) {
                 sucessos++;
             } else {
@@ -299,12 +289,9 @@ int main() {
         cout << "\n" << string(60, '=') << endl;
         cout << "RESUMO DO PROCESSAMENTO EM LOTE" << endl;
         cout << string(60, '=') << endl;
-        cout << "Total de arquivos: " << datFiles.size() << endl;
-        cout << "Sucessos: " << sucessos << endl;
-        cout << "Falhas: " << falhas << endl;
-        cout << "Taxa de sucesso: " << fixed << setprecision(1) 
-             << (datFiles.empty() ? 0 : (100.0 * sucessos / datFiles.size())) << "%" << endl;
-        
+        cout << "Total de arquivos processados: " << datFiles.size() << endl;
+        cout << "  - Sucessos: " << sucessos << endl;
+        cout << "  - Falhas: " << falhas << endl;
     } else {
         cout << "Opção inválida!" << endl;
         return 1;
