@@ -18,18 +18,23 @@ struct Service {
 struct Route { int id; vector<Service> services; int totalDemand = 0; long long totalCost = 0; };
 struct Solution { long long totalCost = 0; vector<Route> routes; long long executionTimeMicroseconds = 0; };
 
-// ====================================================================
-// ABORDAGEM FINAL: CONSTRUÇÃO GARANTIDA + OTIMIZAÇÃO PODEROSA
-// Esta é a arquitetura definitiva que separa a construção de uma solução
-// inicial (Etapa 2) da sua melhoria (Etapa 3).
-// ====================================================================
 class Solver {
 private:
     Graph* graph;
     vector<Service> allServices;
     int depot;
     int capacity;
-    vector<vector<int>> distances;
+    vector<vector<long long>> distances; // Matriz de distâncias
+    bool areDistancesCalculated = false; // Flag para controlar o cálculo
+
+    // Método privado para garantir que as distâncias sejam calculadas antes do uso
+    void ensureDistancesCalculated() {
+        if (!areDistancesCalculated) {
+            cout << "LOG: Acessando distâncias pela primeira vez. Calculando a matriz (Floyd-Warshall)..." << endl;
+            distances = graph->floydWarshall();
+            areDistancesCalculated = true;
+        }
+    }
 
 public:
     Solver(Graph* g, int depotNode, int vehicleCapacity) 
@@ -37,37 +42,37 @@ public:
         if (!graph || depotNode < 0 || depotNode >= g->numNodes() || vehicleCapacity <= 0) {
             throw invalid_argument("Parâmetros do Solver inválidos.");
         }
-        distances = graph->floydWarshall();
+        // AVISO: O cálculo de 'distances' foi REMOVIDO daqui.
     }
 
     void addService(int id, char type, int u, int v, int demand, int serviceCost, int travelCost) {
         allServices.emplace_back(id, type, u, v, demand, serviceCost, travelCost);
     }
 
-    int getDistance(int from, int to) {
+    long long getDistance(int from, int to) {
+        ensureDistancesCalculated(); // Garante que a matriz de distâncias existe
         if (from < 0 || to < 0 || static_cast<size_t>(from) >= distances.size() || static_cast<size_t>(to) >= distances.size()) return INF;
         return distances[from][to];
     }
     
-    // Calcula o custo exato de uma ÚNICA rota. Função auxiliar crucial.
+    // Calcula o custo exato de uma ÚNICA rota.
     long long calculateRouteCost(const vector<Service>& services) {
         if (services.empty()) return 0;
         long long currentCost = 0;
         int lastNode = depot;
         for (const auto& service : services) {
-            int travelToServiceCost = getDistance(lastNode, service.u);
+            long long travelToServiceCost = getDistance(lastNode, service.u);
             if (travelToServiceCost >= INF) return INF;
             currentCost += travelToServiceCost + service.serviceCost;
             if (service.type != 'N') currentCost += service.travelCost;
             lastNode = service.v;
         }
-        int travelToDepotCost = getDistance(lastNode, depot);
+        long long travelToDepotCost = getDistance(lastNode, depot);
         if (travelToDepotCost >= INF) return INF;
         currentCost += travelToDepotCost;
         return currentCost;
     }
     
-    // Recalcula todas as informações de uma solução (custos e demandas)
     void recalculateSolutionMetrics(Solution& solution) {
         solution.totalCost = 0;
         for (auto& route : solution.routes) {
@@ -84,29 +89,24 @@ public:
         }
     }
 
-    // ====================================================================
-    // ETAPA 2: HEURÍSTICA CONSTRUTIVA (Uma Rota Por Serviço)
-    // A heurística mais simples e robusta para GARANTIR uma solução inicial completa.
-    // ====================================================================
+    // ETAPA 2: Heurística Construtiva Simples
     Solution constructInitialSolution() {
         Solution solution;
         int routeIdCounter = 1;
 
         for (const auto& service : allServices) {
-            // Verifica se o serviço é sequer possível de ser atendido
             if (service.demand > capacity) {
                 cerr << "ERRO CRÍTICO: Serviço " << service.id << " tem demanda (" << service.demand
-                     << ") maior que a capacidade do veículo (" << capacity << "). Solução inviável." << endl;
+                     << ") maior que a capacidade do veículo (" << capacity << ")." << endl;
                 solution.totalCost = INF;
                 return solution;
             }
-            // Cria uma rota trivial: Depósito -> Serviço -> Depósito
             Route newRoute;
             newRoute.id = routeIdCounter++;
             newRoute.services.push_back(service);
             
             if (calculateRouteCost(newRoute.services) >= INF) {
-                cerr << "ERRO CRÍTICO: Serviço " << service.id << " é inalcançável a partir do depósito." << endl;
+                cerr << "ERRO CRÍTICO: Serviço " << service.id << " (de " << service.u + 1 << " para " << service.v + 1 << ") é inalcançável a partir do depósito." << endl;
                 solution.totalCost = INF;
                 return solution;
             }
@@ -118,71 +118,84 @@ public:
         return solution;
     }
 
-    // ====================================================================
-    // ETAPA 3: ALGORITMO DE MELHORIA (Busca Local)
-    // Otimiza a solução inicial movendo e fundindo rotas.
-    // ====================================================================
+    // ETAPA 3: Busca Local para otimização
     void localSearch(Solution& solution) {
-        bool improvement = true;
-        while (improvement) {
-            improvement = false;
-            long long bestCost = solution.totalCost;
+        bool improvement_found;
+        do {
+            improvement_found = false;
+            long long best_cost_reduction = 0;
+            int best_i = -1, best_j = -1;
+            vector<Service> best_merged_services;
 
-            // Vizinhança 1: Tenta juntar rotas
             for (size_t i = 0; i < solution.routes.size(); ++i) {
                 for (size_t j = i + 1; j < solution.routes.size(); ++j) {
                     if (solution.routes[i].totalDemand + solution.routes[j].totalDemand <= capacity) {
+                        long long original_sum_cost = solution.routes[i].totalCost + solution.routes[j].totalCost;
                         
-                        // Testa fundir j no fim de i
                         vector<Service> merged_fwd = solution.routes[i].services;
                         merged_fwd.insert(merged_fwd.end(), solution.routes[j].services.begin(), solution.routes[j].services.end());
-                        
-                        // Testa fundir i no fim de j
+                        long long cost_fwd = calculateRouteCost(merged_fwd);
+
+                        if (cost_fwd < original_sum_cost) {
+                            long long reduction = original_sum_cost - cost_fwd;
+                            if (reduction > best_cost_reduction) {
+                                best_cost_reduction = reduction;
+                                best_i = i;
+                                best_j = j;
+                                best_merged_services = merged_fwd;
+                            }
+                        }
+
                         vector<Service> merged_rev = solution.routes[j].services;
                         merged_rev.insert(merged_rev.end(), solution.routes[i].services.begin(), solution.routes[i].services.end());
-
-                        long long cost_fwd = calculateRouteCost(merged_fwd);
                         long long cost_rev = calculateRouteCost(merged_rev);
-                        
-                        long long original_sum_cost = solution.routes[i].totalCost + solution.routes[j].totalCost;
 
-                        if (cost_fwd < original_sum_cost || cost_rev < original_sum_cost) {
-                             if(cost_fwd < cost_rev) {
-                                solution.routes[i].services = merged_fwd;
-                             } else {
-                                solution.routes[i].services = merged_rev;
-                             }
-                             solution.routes.erase(solution.routes.begin() + j);
-                             recalculateSolutionMetrics(solution);
-                             improvement = true;
-                             cout << "LOG: Rotas fundidas! Novo custo: " << solution.totalCost << endl;
-                             goto next_iteration;
+                        if (cost_rev < original_sum_cost) {
+                            long long reduction = original_sum_cost - cost_rev;
+                            if (reduction > best_cost_reduction) {
+                                best_cost_reduction = reduction;
+                                best_i = j;
+                                best_j = i;
+                                best_merged_services = merged_rev;
+                            }
                         }
                     }
                 }
             }
-            next_iteration:;
+
+            if (best_cost_reduction > 0) {
+                solution.routes[best_i].services = best_merged_services;
+                solution.routes.erase(solution.routes.begin() + best_j);
+                recalculateSolutionMetrics(solution);
+                cout << "LOG: Rotas fundidas! Novo custo total: " << solution.totalCost << ". Numero de rotas: " << solution.routes.size() << endl;
+                improvement_found = true;
+            }
+
+        } while (improvement_found);
+
+        for(size_t i = 0; i < solution.routes.size(); ++i) {
+            solution.routes[i].id = i + 1;
         }
-        // Remove rotas que possam ter ficado vazias (não deve acontecer com esta lógica, mas é uma segurança)
-        solution.routes.erase(remove_if(solution.routes.begin(), solution.routes.end(), 
-            [](const Route& r){ return r.services.empty(); }), solution.routes.end());
-        recalculateSolutionMetrics(solution);
     }
 
-    // Função principal que orquestra todo o processo
+
+    // Orquestra todo o processo de resolução.
     Solution solve() {
         auto start = chrono::high_resolution_clock::now();
         
         cout << "LOG: Total de serviços a serem atendidos: " << allServices.size() << endl;
         
-        // FASE 1: Constrói uma solução inicial garantidamente viável
+        // Garante que o cálculo de distância seja feito antes de qualquer coisa
+        ensureDistancesCalculated();
+
         Solution solution = constructInitialSolution();
         
-        // FASE 2: Otimiza a solução se ela for viável
         if (solution.totalCost < INF) {
+            cout << "LOG: Iniciando busca local para otimizar a solucao..." << endl;
             localSearch(solution);
+            cout << "LOG: Busca local concluida. Custo final: " << solution.totalCost << endl;
         } else {
-             cout << "ERRO: Não foi possível construir uma solução inicial viável." << endl;
+             cout << "ERRO: Não foi possível construir uma solução inicial viável. Otimizacao abortada." << endl;
         }
 
         auto end = chrono::high_resolution_clock::now();
@@ -190,36 +203,43 @@ public:
         return solution;
     }
 
-    // Guarda a solução final no formato especificado
+    // Guarda a solução final no formato especificado.
     void saveSolution(const Solution& solution, const string& instanceName) {
         string dirPath = "solucoes";
         try { if (!filesystem::exists(dirPath)) filesystem::create_directories(dirPath); }
-        catch (const exception& e) { cerr << "Error creating directory " << dirPath << ": " << e.what() << endl; return; }
+        catch (const exception& e) { cerr << "Erro ao criar diretório " << dirPath << ": " << e.what() << endl; return; }
         
         string solutionPath = dirPath + "/sol-" + instanceName;
         ofstream out(solutionPath);
-        if (!out.is_open()) { cerr << "Error creating solution file at: " << solutionPath << endl; return; }
+        if (!out.is_open()) { cerr << "Erro ao criar arquivo de solucao em: " << solutionPath << endl; return; }
 
-        out << solution.totalCost << endl;
-        out << solution.routes.size() << endl;
-        out << solution.executionTimeMicroseconds << endl;
-        out << solution.executionTimeMicroseconds << endl;
+        if (solution.totalCost >= INF || solution.routes.empty() && !allServices.empty()) {
+            out << "inviavel" << endl;
+            cout << "AVISO: Solução é inviável, salva como 'inviavel'." << endl;
+        } else {
+            out << solution.totalCost << endl;
+            out << solution.routes.size() << endl;
+            out << solution.executionTimeMicroseconds << endl;
+            out << solution.executionTimeMicroseconds << endl;
 
-        for (const auto& route : solution.routes) {
-            out << " 0 1 " << route.id << " " << route.totalDemand << " " << route.totalCost 
-                << " " << (route.services.size() + 2);
-            out << " (D 0," << depot + 1 << "," << depot + 1 << ")";
-            for (const auto& service : route.services) {
-                out << " (S " << service.id << "," << service.u + 1 << "," << service.v + 1 << ")";
+            for (const auto& route : solution.routes) {
+                out << " " << depot + 1 << " 1 " << route.id << " " << route.totalDemand << " " << route.totalCost 
+                    << " " << (route.services.size() + 2);
+                out << " (D 0," << depot + 1 << "," << depot + 1 << ")";
+                for (const auto& service : route.services) {
+                    out << " (S " << service.id << "," << service.u + 1 << "," << service.v + 1 << ")";
+                }
+                out << " (D 0," << depot + 1 << "," << depot + 1 << ")";
+                out << endl;
             }
-            out << " (D 0," << depot + 1 << "," << depot + 1 << ")";
-            out << endl;
         }
         
         out.close();
-        cout << "Solution saved to: " << solutionPath << endl;
-        cout << "  - Total Cost: " << solution.totalCost << endl;
-        cout << "  - Num Routes: " << solution.routes.size() << endl;
+        if(solution.totalCost < INF) {
+            cout << "Solucao salva em: " << solutionPath << endl;
+            cout << "  - Custo Total: " << solution.totalCost << endl;
+            cout << "  - N. de Rotas: " << solution.routes.size() << endl;
+        }
     }
 };
 

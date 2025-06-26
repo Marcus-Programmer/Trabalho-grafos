@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <cctype>
 #include "Graph.hpp"
 #include "Solver.hpp"
 
@@ -14,7 +15,7 @@ namespace fs = std::filesystem;
 
 // Enum para controlar o estado do parser de forma robusta
 enum class Section {
-    NONE,
+    HEADER,
     REQ_NODES,
     REQ_EDGES,
     REQ_ARCS,
@@ -22,7 +23,13 @@ enum class Section {
     NON_REQ_ARCS
 };
 
-// Função para ler arquivo de entrada e configurar solver
+// Função para converter uma string para maiúsculas para comparação insensível
+string toUpper(string s) {
+    transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return toupper(c); });
+    return s;
+}
+
+// Abordagem de parser em dois passos para máxima robustez.
 Solver* parseInputFile(const string& filename, Graph*& graph) {
     ifstream infile(filename);
     if (!infile.is_open()) {
@@ -30,89 +37,119 @@ Solver* parseInputFile(const string& filename, Graph*& graph) {
         return nullptr;
     }
 
+    // Lê o arquivo inteiro para uma stringstream para permitir múltiplos passos
+    stringstream filestream;
+    filestream << infile.rdbuf();
+    infile.close();
+
     string line;
     int V = 0, capacity = 0, depot_node = 0;
-    
-    // Passada 1: Lê apenas as informações do cabeçalho de forma segura
-    string file_content((istreambuf_iterator<char>(infile)), istreambuf_iterator<char>());
-    stringstream header_stream(file_content);
-    
-    while(getline(header_stream, line)) {
-        if (line.find("Capacity:") != string::npos) { stringstream ss(line); string tmp; ss >> tmp >> capacity; }
-        else if (line.find("Depot Node:") != string::npos) { stringstream ss(line); string tmp1, tmp2; ss >> tmp1 >> tmp2 >> depot_node; }
-        else if (line.find("#Nodes:") != string::npos) { stringstream ss(line); string tmp; ss >> tmp >> V; }
+
+    // --- PASSO 1: LER APENAS O CABEÇALHO ---
+    cout << "LOG: Passo 1: Lendo o cabeçalho..." << endl;
+    while(getline(filestream, line)) {
+        string upper_line = toUpper(line);
+        size_t pos = line.find(":");
+        if (pos == string::npos) continue; // Ignora linhas sem ':' no cabeçalho
+
+        try {
+            string value_str = line.substr(pos + 1);
+            if (upper_line.find("CAPACITY") != string::npos) {
+                capacity = stoi(value_str);
+            } else if (upper_line.find("#NODES") != string::npos) {
+                V = stoi(value_str);
+            } else if (upper_line.find("DEPOT NODE") != string::npos) {
+                depot_node = stoi(value_str);
+            }
+        } catch (const std::exception& e) {
+            // Ignora erros de conversão, pode ser uma linha de texto qualquer
+        }
     }
     
+    // --- VALIDAÇÃO E INICIALIZAÇÃO ---
+    cout << "LOG: Fim do Passo 1. Valores lidos -> Nós: " << V << ", Capacidade: " << capacity << ", Depósito: " << depot_node << endl;
     if (V <= 0 || capacity <= 0 || depot_node <= 0) {
-        cerr << "ERRO CRÍTICO: Informações essenciais (Nós, Capacidade, Depósito) não encontradas ou inválidas." << endl;
+        cerr << "ERRO CRÍTICO: Falha ao ler informações essenciais do cabeçalho. Verifique se '#Nodes', 'Capacity' e 'Depot Node' existem e são válidos." << endl;
         return nullptr;
     }
 
-    cout << "LOG: Capacidade: " << capacity << ", Depósito: " << depot_node << ", Nós: " << V << endl;
-    
-    graph = new Graph(V);
-    Solver* solver = new Solver(graph, depot_node - 1, capacity);
-    cout << "LOG: Grafo e Solver inicializados com sucesso." << endl;
+    try {
+        graph = new Graph(V);
+        Solver* solver = new Solver(graph, depot_node - 1, capacity);
+        cout << "LOG: Grafo e Solver inicializados com sucesso." << endl;
 
-    int serviceId = 1;
-    Section currentSection = Section::NONE;
-    
-    // Passada 2: Processa o conteúdo do ficheiro para ler os dados das secções
-    stringstream data_stream(file_content);
-    while (getline(data_stream, line)) {
-        if (line.empty() || line.find_first_not_of(" \t\r\n") == string::npos) continue;
+        // --- PASSO 2: LER OS DADOS DO GRAFO ---
+        filestream.clear(); // Limpa os flags de fim de arquivo
+        filestream.seekg(0, ios::beg); // "Rebobina" a stream para o início
 
-        // Determina a seção atual
-        if (line.find("ReN.") != string::npos) { currentSection = Section::REQ_NODES; cout << "LOG: Lendo seção ReN..." << endl; continue; }
-        if (line.find("ReE.") != string::npos) { currentSection = Section::REQ_EDGES; cout << "LOG: Lendo seção ReE..." << endl; continue; }
-        if (line.find("ReA.") != string::npos) { currentSection = Section::REQ_ARCS; cout << "LOG: Lendo seção ReA..." << endl; continue; }
-        if (line.find("EDGE") != string::npos && line.find("ReE.") == string::npos) { currentSection = Section::NON_REQ_EDGES; cout << "LOG: Lendo seção EDGE..." << endl; continue; }
-        if (line.find("ARC") != string::npos && line.find("ReA.") == string::npos) { currentSection = Section::NON_REQ_ARCS; cout << "LOG: Lendo seção ARC..." << endl; continue; }
-        
-        // Ignora linhas que são cabeçalhos de tabela ou comentários
-        if (line.find("DEMAND") != string::npos || line.find("From N.") != string::npos || line.find("Name:") != string::npos || line[0] == '#') continue;
+        Section currentSection = Section::HEADER;
+        int serviceId = 1;
 
-        stringstream ss(line);
-        string id_str;
-        int u, v, cost, demand, s_cost;
+        cout << "LOG: Passo 2: Lendo os dados do grafo..." << endl;
+        while(getline(filestream, line)) {
+            if (line.find_first_not_of(" \t\r\n") == string::npos || line[0] == '#') continue;
+            
+            string upper_line = toUpper(line);
 
-        switch (currentSection) {
-            case Section::REQ_NODES:
-                if (ss >> id_str >> demand >> s_cost) {
-                    u = stoi(id_str.substr(1));
-                    solver->addService(serviceId++, 'N', u - 1, u - 1, demand, s_cost, 0);
+            bool is_section_marker = false;
+            if (upper_line.find("REN.") != string::npos)      { currentSection = Section::REQ_NODES; is_section_marker = true; }
+            else if (upper_line.find("REE.") != string::npos) { currentSection = Section::REQ_EDGES; is_section_marker = true; }
+            else if (upper_line.find("REA.") != string::npos) { currentSection = Section::REQ_ARCS;  is_section_marker = true; }
+            else if (upper_line.find("EDGE") != string::npos && upper_line.find("REE.") == string::npos) { currentSection = Section::NON_REQ_EDGES; is_section_marker = true; }
+            else if (upper_line.find("ARC") != string::npos && upper_line.find("REA.") == string::npos)  { currentSection = Section::NON_REQ_ARCS;  is_section_marker = true; }
+
+            if (is_section_marker || (currentSection != Section::HEADER && upper_line.find("FROM N.") != string::npos) ) {
+                continue;
+            }
+
+            if (currentSection != Section::HEADER) {
+                stringstream ss(line);
+                int u, v, cost, demand, s_cost;
+                string id_str;
+                switch (currentSection) {
+                    case Section::REQ_NODES:
+                        if (ss >> id_str >> demand >> s_cost) {
+                            u = stoi(id_str.substr(1));
+                            solver->addService(serviceId++, 'N', u - 1, u - 1, demand, s_cost, 0);
+                        }
+                        break;
+                    case Section::REQ_EDGES:
+                        if (ss >> id_str >> u >> v >> cost >> demand >> s_cost) {
+                            graph->addEdge(u - 1, v - 1, cost, false, true);
+                            solver->addService(serviceId++, 'E', u - 1, v - 1, demand, s_cost, cost);
+                        }
+                        break;
+                    case Section::REQ_ARCS:
+                        if (ss >> id_str >> u >> v >> cost >> demand >> s_cost) {
+                            graph->addEdge(u - 1, v - 1, cost, true, true);
+                            solver->addService(serviceId++, 'A', u - 1, v - 1, demand, s_cost, cost);
+                        }
+                        break;
+                    case Section::NON_REQ_EDGES:
+                        if (ss >> id_str >> u >> v >> cost) {
+                            graph->addEdge(u - 1, v - 1, cost, false, false);
+                        }
+                        break;
+                    case Section::NON_REQ_ARCS:
+                        if (ss >> id_str >> u >> v >> cost) {
+                            graph->addEdge(u - 1, v - 1, cost, true, false);
+                        }
+                        break;
+                    default:
+                        break;
                 }
-                break;
-            case Section::REQ_EDGES:
-                if (ss >> id_str >> u >> v >> cost >> demand >> s_cost) {
-                    graph->addEdge(u - 1, v - 1, cost, false, true);
-                    solver->addService(serviceId++, 'E', u - 1, v - 1, demand, s_cost, cost);
-                }
-                break;
-            case Section::REQ_ARCS:
-                if (ss >> id_str >> u >> v >> cost >> demand >> s_cost) {
-                    graph->addEdge(u - 1, v - 1, cost, true, true);
-                    solver->addService(serviceId++, 'A', u - 1, v - 1, demand, s_cost, cost);
-                }
-                break;
-            case Section::NON_REQ_EDGES:
-                 if (ss >> id_str >> u >> v >> cost) {
-                    graph->addEdge(u - 1, v - 1, cost, false, false);
-                }
-                break;
-            case Section::NON_REQ_ARCS:
-                if (ss >> id_str >> u >> v >> cost) {
-                    graph->addEdge(u - 1, v - 1, cost, true, false);
-                }
-                break;
-            case Section::NONE:
-                break;
+            }
         }
-    }
+        cout << "LOG: Passo 2 concluído. Total de serviços adicionados: " << serviceId - 1 << endl;
+        return solver;
 
-    cout << "LOG: Parser concluído com sucesso!" << endl;
-    return solver;
+    } catch (const exception& e) {
+        cerr << "ERRO CRÍTICO durante a inicialização: " << e.what() << endl;
+        if(graph) delete graph;
+        return nullptr;
+    }
 }
+
 
 // Função para processar um único arquivo
 bool processFile(const string& filename, int opcao) {
@@ -126,13 +163,14 @@ bool processFile(const string& filename, int opcao) {
     
     try {
         solver = parseInputFile(inputPath, graph);
-        if (!graph || !solver) {
-            cerr << "ERRO: Falha ao inicializar o problema a partir de " << filename << endl;
+        if (!solver) {
+            cerr << "ERRO: Falha ao inicializar o problema a partir de " << filename << ". Parser retornou nulo." << endl;
             if (graph) delete graph;
             return false;
         }
 
-        string baseFilename = filename.substr(0, filename.find('.'));
+        string baseFilename = fs::path(filename).stem().string();
+        string ext = fs::path(filename).extension().string();
         
         Solution solution;
         if (opcao == 2 || opcao == 3) {
@@ -141,16 +179,20 @@ bool processFile(const string& filename, int opcao) {
 
         switch (opcao) {
             case 1:
-                graph->printStatsToFile("estatisticas/estatisticas_" + baseFilename + ".txt");
-                graph->exportToDOT("grafos/grafo_" + baseFilename + ".dot");
+                if(graph) {
+                    graph->printStatsToFile("estatisticas/estatisticas_" + baseFilename + ".txt");
+                    graph->exportToDOT("grafos/grafo_" + baseFilename + ".dot");
+                }
                 break;
             case 2:
-                solver->saveSolution(solution, filename);
+                solver->saveSolution(solution, baseFilename + ext);
                 break;
             case 3:
-                graph->printStatsToFile("estatisticas/estatisticas_" + baseFilename + ".txt");
-                graph->exportToDOT("grafos/grafo_" + baseFilename + ".dot");
-                solver->saveSolution(solution, filename);
+                 if(graph) {
+                    graph->printStatsToFile("estatisticas/estatisticas_" + baseFilename + ".txt");
+                    graph->exportToDOT("grafos/grafo_" + baseFilename + ".dot");
+                }
+                solver->saveSolution(solution, baseFilename + ext);
                 break;
         }
 
@@ -175,7 +217,8 @@ vector<string> getDatFiles(const string& folderPath) {
     for (const auto& entry : fs::directory_iterator(folderPath)) {
         if (entry.is_regular_file()) {
             string filename = entry.path().filename().string();
-            if (filename.size() >= 4 && (filename.substr(filename.size() - 4) == ".dat" || filename.substr(filename.size() - 4) == ".txt")) {
+            string ext = entry.path().extension().string();
+            if (ext == ".dat" || ext == ".txt") {
                 datFiles.push_back(filename);
             }
         }
@@ -209,7 +252,7 @@ int main() {
         
         cout << "\nEscolha o tipo de processamento:" << endl;
         cout << "1 - Gerar apenas estatísticas do grafo" << endl;
-        cout << "2 - Gerar solução (Etapa 2 e 3)" << endl;
+        cout << "2 - Gerar solução (Etapa 3)" << endl;
         cout << "3 - Gerar estatísticas e solução" << endl;
         
         int opcao;
@@ -224,7 +267,7 @@ int main() {
     } else if (modoProcessamento == 2) {
         cout << "\nEscolha o tipo de processamento para todos os arquivos:" << endl;
         cout << "1 - Gerar apenas estatísticas do grafo" << endl;
-        cout << "2 - Gerar solução (Etapa 2 e 3)" << endl;
+        cout << "2 - Gerar solução (Etapa 3)" << endl;
         cout << "3 - Gerar estatísticas e solução" << endl;
         
         int opcao;
